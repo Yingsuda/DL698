@@ -1,13 +1,15 @@
 package protocol
 
 import (
+	"dl698/utils"
 	"encoding/binary"
 	"fmt"
+	"github.com/sigurn/crc16"
 	"sync"
 )
 
 type PacketCodec interface {
-	Decode([]byte) (*PacketData, error)
+	Decode([]byte) (*utils.PacketData, error)
 }
 
 type DL698PacketCodec struct{}
@@ -22,8 +24,14 @@ func GetJT808PacketCodec() *DL698PacketCodec {
 	return dl698PacketCodec
 }
 
+// 还原原始数据包
+func (pc *DL698PacketCodec) unescape(src []byte) []byte {
+	dst := make([]byte, 0)
+	return dst
+}
+
 // 反转义 -> 校验 -> 反序列化
-func (pc *DL698PacketCodec) Decode(data []byte) (*PacketData, error) {
+func (pc *DL698PacketCodec) Decode(data []byte) (*utils.PacketData, error) {
 	if len(data) < 10 {
 		return nil, fmt.Errorf("minimum length err")
 	}
@@ -33,22 +41,22 @@ func (pc *DL698PacketCodec) Decode(data []byte) (*PacketData, error) {
 	//长度域
 	length := append([]byte{}, data[1:3]...)
 	length[1] = 0b00111111 & length[1]
-	la := LengthArea{
-		length: binary.LittleEndian.Uint16(length),
+	la := utils.LengthArea{
+		Length: binary.LittleEndian.Uint16(length),
 	}
-	fmt.Println("la.length:", la.length)
+	//fmt.Println("la.length:", la.Length)
 	//长度校验
-	if len(data) != int(la.length+2) {
+	if len(data) != int(la.Length+2) {
 		return nil, fmt.Errorf("total length err")
 	}
 
 	//控制域
-	ca := CTRLArea{
-		dir:      data[3] >> 7,
-		prm:      (data[3] << 1) >> 7,
-		framing:  (data[3] << 2) >> 7,
-		blur:     (data[3] << 4) >> 7,
-		funcCode: data[3] & 0b00000111,
+	ca := utils.CTRLArea{
+		Dir:      data[3] >> 7,
+		Prm:      (data[3] << 1) >> 7,
+		Framing:  (data[3] << 2) >> 7,
+		Blur:     (data[3] << 4) >> 7,
+		FuncCode: data[3] & 0b00000111,
 	}
 
 	//地址域
@@ -74,57 +82,66 @@ func (pc *DL698PacketCodec) Decode(data []byte) (*PacketData, error) {
 		return nil, fmt.Errorf("address type err")
 	}
 
-	aa := AddressArea{
-		sa: AddressSA{
-			addressType:  addrType,
-			logicAddress: logicAddr,
-			addressLen:   addressLen,
+	aa := utils.AddressArea{
+		Sa: utils.AddressSA{
+			AddressType:  addrType,
+			LogicAddress: logicAddr,
+			AddressLen:   addressLen,
 			//extendLogic:  data[8],
-			address: address,
+			Address: address,
 		},
-		ca: data[5+addressLen],
+		Ca: data[5+addressLen],
 	}
 
-	fmt.Println("logic:", aa.sa.logicAddress)
-	fmt.Println("addressLen:", aa.sa.addressLen)
-	fmt.Println("address:", aa.sa.address)
-	fmt.Println("CA:", aa.ca)
+	//fmt.Println("logic:", aa.Sa.LogicAddress)
+	//fmt.Println("addressLen:", aa.Sa.AddressLen)
+	//fmt.Println("address:", aa.Sa.Address)
+	//fmt.Println("CA:", aa.Ca)
 	//HCS
 
 	//APDU
 	apduData := data[5+addressLen+3 : len(data)-3]
-	fmt.Printf("APDU Data:% 02X\n", apduData)
+	//fmt.Printf("APDU Data:% 02X\n", apduData)
 	//校验尾CS
-	if ca.blur == 1 {
+	if ca.Blur == 1 {
 		//扰码还原
 		apduData = pc.unescape(apduData)
 	}
 
-	//encode APDU
-	apduType, err := GetAPDUType(apduData[0])
-	if err != nil {
-		return nil, err
-	}
-
-	var apdu APDU
-	switch apduType {
-	case LINK_Request:
-		apdu = &Link_Request{}
-	case LINK_Response:
-		apdu = &Link_Response{}
-
-	}
-
-	p := new(PacketData)
-	p.length = la
-	p.control = ca
-	p.address = aa
-	p.apdu = apdu
+	p := new(utils.PacketData)
+	p.Length = la
+	p.Control = ca
+	p.Address = aa
+	p.Body = apduData
 	return p, nil
 }
 
-// 还原原始数据包
-func (pc *DL698PacketCodec) unescape(src []byte) []byte {
-	dst := make([]byte, 0)
-	return dst
+func (pc *DL698PacketCodec) Encode(pkd *utils.PacketData, pcd *utils.ProcessData) ([]byte, error) {
+	data := []byte{0x68,
+		0x00, 0x00,
+		0x00,
+	}
+	//funcCode
+	//pkd.Control.Dir = 0
+	//fmt.Println("control:", pkd.Control)
+	data[3] = pkd.EncodeControl()
+
+	pkd.Address.Ca = 0x10
+
+	data = append(data, pkd.EncodeAddress()...)
+	hcs := len(data)
+	data = append(data, 0xFF, 0xFF)
+
+	od, err := pcd.OutComing.Encode()
+	if err != nil {
+		return nil, err
+	}
+	//
+	data = append(data, od...)
+	data = append(data, []byte{0xFF, 0xFF}...)
+	data = append(data, 0x16)
+	binary.LittleEndian.PutUint16(data[1:], uint16(len(data)-2))                                                              //长度
+	binary.LittleEndian.PutUint16(data[hcs:], crc16.Checksum(data[1:hcs], crc16.MakeTable(crc16.CRC16_X_25)))                 //HCS
+	binary.LittleEndian.PutUint16(data[len(data)-3:], crc16.Checksum(data[1:len(data)-3], crc16.MakeTable(crc16.CRC16_X_25))) //FCS
+	return data, nil
 }
