@@ -1,7 +1,7 @@
 package pmodel
 
 import (
-	"dl698/utils"
+	"dev.magustek.com/bigdata/dass/iotdriver/OP2_DL_698/utils"
 	"fmt"
 	"testing"
 	"time"

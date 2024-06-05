@@ -1,8 +1,8 @@
 package pmodel
 
 import (
-	"dl698/dataExchange"
-	"dl698/utils"
+	"dev.magustek.com/bigdata/dass/iotdriver/OP2_DL_698/dataExchange"
+	"dev.magustek.com/bigdata/dass/iotdriver/OP2_DL_698/utils"
 	"encoding/binary"
 	"fmt"
 	"strconv"
@@ -28,12 +28,11 @@ func (g *GetRequest) Encode() ([]byte, error) {
 
 func (g *GetRequest) Decode(data []byte) error {
 	var err error
-	fmt.Println("Get Request")
 	g.oads = make([]string, 0)
 	g.getType = data[1]
 	switch data[1] {
 	case 1:
-		fmt.Println("GetRequestNormal")
+		//fmt.Println("GetRequestNormal")
 		if len(data) >= 8 {
 			g.piid = data[2]
 			g.oadLength = 1
@@ -43,24 +42,40 @@ func (g *GetRequest) Decode(data []byte) error {
 			}
 			g.oads = append(g.oads, oad)
 			g.timeTag = data[7]
-			//fmt.Println("oad:", g.oads)
-			//fmt.Println("Time Tag:", g.timeTag)
 		} else {
 			err = fmt.Errorf("GetRequestNormal Data length error")
 		}
 	case 2:
-		fmt.Println("GetRequestNormalList")
+		//fmt.Println("GetRequestNormalList")
+		g.piid = data[2]
+		g.oadLength = data[3]
+		if len(data[4:]) == int(4*g.oadLength)+1 {
+			for i := 0; i < int(g.oadLength); i++ {
+				oad := ""
+				for l := 0; l < 4; l++ {
+					oad += fmt.Sprintf("%02x", data[4+i*4+l])
+				}
+				g.oads = append(g.oads, oad)
+			}
+			g.timeTag = data[4+4*g.oadLength]
+		} else {
+			err = fmt.Errorf("oad length err ")
+		}
 	case 3:
-		fmt.Println("GetRequestRecord")
+		//fmt.Println("GetRequestRecord")
+		err = fmt.Errorf("unSupport Get request type %v", g.getType)
 	case 4:
-		fmt.Println("GetRequestRecordList")
+		//fmt.Println("GetRequestRecordList")
+		err = fmt.Errorf("unSupport Get request type %v", g.getType)
 	case 5:
-		fmt.Println("GetRequestNext")
+		//fmt.Println("GetRequestNext")
+		err = fmt.Errorf("unSupport Get request type %v", g.getType)
 	case 6:
-		fmt.Println("GetRequestMD5")
-
+		//fmt.Println("GetRequestMD5")
+		err = fmt.Errorf("unSupport Get request type %v", g.getType)
+	default:
+		err = fmt.Errorf("unSupport Get request type %v", g.getType)
 	}
-
 	return err
 }
 
@@ -97,7 +112,7 @@ func (g *GetResponse) Encode() ([]byte, error) {
 		ob := make([]byte, 4)
 		binary.BigEndian.PutUint32(ob, uint32(oi))
 		data = append(data, ob...)
-		//data = append(data, g.errInfos[i])
+		data = append(data, g.errInfos[i])
 		data = append(data, g.values[i]...)
 	}
 	data = append(data, 0x00, 0x00)
@@ -121,14 +136,20 @@ func (g *GetResponse) GenOutGoing(in utils.APDU) {
 		g.oads = append(g.oads, ind.oads...)
 		for _, oad := range ind.oads {
 			//根据oad获取数据， 获取到一个数据类型，但后Encode成[]byte
+
 			dt, errCode := dataExchange.GetDL698DataTypeByOAD(oad)
 			if errCode != 0 {
-				g.errInfos = append(g.errInfos, errCode)
-				g.values = append(g.values, []byte{})
+				g.errInfos = append(g.errInfos, 0x00)
+				g.values = append(g.values, []byte{0x04}) //DAR  接口未定义
 			} else {
-				val, _ := dt.Encode()
-				g.errInfos = append(g.errInfos, errCode)
-				g.values = append(g.values, val)
+				val, err := dt.Encode()
+				if err != nil {
+					g.errInfos = append(g.errInfos, 0x00)
+					g.values = append(g.values, []byte{0x07}) //DAR  类型不匹配
+				} else {
+					g.errInfos = append(g.errInfos, 0x01) //数据
+					g.values = append(g.values, val)
+				}
 			}
 		}
 	} else {

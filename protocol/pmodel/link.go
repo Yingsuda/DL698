@@ -1,7 +1,7 @@
 package pmodel
 
 import (
-	"dl698/utils"
+	"dev.magustek.com/bigdata/dass/iotdriver/OP2_DL_698/utils"
 	"encoding/binary"
 	"fmt"
 	"time"
@@ -25,7 +25,7 @@ func (l *LinkRequest) GetType() utils.APDUType {
 }
 
 func (l *LinkRequest) Encode() ([]byte, error) {
-	fmt.Println("Link Request Data")
+	//	fmt.Println("Link Request Data")
 	data := []byte{byte(utils.LINK_Request), l.Piid_acd, l.RequestType, 0x00, 0x00}
 	binary.BigEndian.PutUint16(data[3:], l.Heartbeat)
 	data = append(data, utils.Str2DataTime(time.Now().Format("2006-01-02 15:04:05.000"))...)
@@ -39,7 +39,7 @@ func (l *LinkRequest) Decode(data []byte) error {
 	//fmt.Println("heartBeat:", l.heartbeat)
 	st := utils.DataTime2Str(data[5:15])
 	l.requestDate = st //[]byte to data
-	fmt.Println("requestDate:", l.requestDate)
+	//fmt.Println("requestDate:", l.requestDate)
 	l.receiveDate = time.Now().Format("2006-01-02 15:04:05.000") //时间
 	return nil
 }

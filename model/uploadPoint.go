@@ -1,29 +1,95 @@
 package model
 
 import (
-	"dl698/dataExchange"
-	"dl698/utils"
+	"dev.magustek.com/bigdata/dass/iotdriver/OP2_DL_698/dataExchange"
+	"dev.magustek.com/bigdata/dass/iotdriver/OP2_DL_698/utils"
 	"errors"
 	"fmt"
+	"gitee.com/iotdrive/tools/logs"
 	"math"
 	"reflect"
 	"strconv"
+	"strings"
 	"time"
 )
 
-type sub_point interface {
-}
-
+// 数组怎么支持
 type UploadPoint struct {
-	Oad string //
-	Uid int
+	Oad string              //oad name
+	Uid int                 //for update value
+	GN  string              //for control ; array not support control
 	Dt  utils.DL698DataType //数据类型
 	//数组类型：
 	Value   interface{} //单个点的值
-	IsArray bool
+	Unit    byte        //单位 代号：0-255
+	IsArray bool        //
+	index   byte
 	//
-	piMap  map[int]byte  //根据uid更新数据的时候用
+	piMap  map[int]byte  //保存数组Index，用于查找
 	values []interface{} //校验规则
+}
+
+func convertUploadPoint(ad, sr string) (*UploadPoint, error) {
+	up := new(UploadPoint)
+	if ad == "" {
+		return nil, errors.New("ad is empty")
+	}
+	if sr == "" {
+		return nil, errors.New("sr is empty")
+	}
+
+	dt, err := utils.GetDLDataType(sr)
+	if err != nil {
+		return nil, err
+	}
+
+	if dt == utils.DT_Scaler_Uint {
+		//单位类型获取；Unit
+		ss := strings.Split(ad, ";")
+		if len(ss) == 2 {
+			unitNum, err := strconv.Atoi(ss[1])
+			if err != nil {
+				return nil, fmt.Errorf("unit num exchange err:%s", err.Error())
+			}
+
+			if unitNum >= 0 && unitNum <= 255 {
+				up.Unit = byte(unitNum)
+			} else {
+				return nil, fmt.Errorf("unit num is %d ;out of range (0-255)", unitNum)
+			}
+		} else {
+			return nil, fmt.Errorf("SR is Scaler_Uint ,AD need unit;ex: oad;unit")
+		}
+		ad = ss[0]
+	}
+
+	//数组
+	ss := strings.Split(ad, "[")
+	if len(ss) == 2 {
+		up.Oad = ss[0]
+		up.IsArray = true
+		ad = ss[1]
+		ss = strings.Split(ad, "]")
+		if len(ss) == 2 {
+			indexNum, err := strconv.Atoi(ss[0])
+			if err != nil {
+				return nil, fmt.Errorf("index num exchange err:%s", err.Error())
+			}
+			if indexNum >= 0 && indexNum <= 255 {
+				up.index = byte(indexNum)
+			} else {
+				return nil, fmt.Errorf("index num is %d ;out of range (0-255)", indexNum)
+			}
+		} else {
+			return nil, fmt.Errorf("this point is array ,AD need array index ;ad ex as: oad[index]")
+		}
+	} else if len(ss) == 1 {
+		up.Oad = ss[0]
+	} else {
+		return nil, fmt.Errorf("ad is error")
+	}
+	up.Dt = dt
+	return up, nil
 }
 
 func (e *ElectricityMeter) UpdateElectricityInfo(uid int, val interface{}) {
@@ -40,7 +106,7 @@ func (e *ElectricityMeter) UpdateElectricityInfo(uid int, val interface{}) {
 				up.values[index] = val
 				//fmt.Println("values:", up.values)
 			} else {
-				fmt.Println("UID not ok:", uid)
+				logs.Error("uid ", uid, " not exist ,update value error")
 			}
 		} else {
 			up.Value = val
@@ -62,19 +128,23 @@ func (e *ElectricityMeter) GetElectricityInfo(oad string) (*UploadPoint, error) 
 	return nil, fmt.Errorf("oad not exit")
 }
 
-func (e *ElectricityMeter) GetDL698DataByOAD(oad string) (utils.DL698Data, byte) {
+func (e *ElectricityMeter) Getdl698DataByOAD(oad string) (utils.DL698Data, byte) {
+	//fmt.Println("Get Data OAD is :", oad)
 	up, err := e.GetElectricityInfo(oad)
 	if err != nil {
 		return nil, 0xff
 	}
+	var val float64
 	if up.IsArray {
 		dlArray := &utils.DTArray{}
 		for _, value := range up.values {
 			//所有Go类型数据转为Float64
-			val, err := getFloat64(value)
-			if err != nil {
-				fmt.Println("Get float64 err:", err)
-				return nil, 0xff
+			if up.Dt != utils.DT_OCTET_STR {
+				val, err = getFloat64(value)
+				if err != nil {
+					logs.Error("Get float64 err:", err)
+					return nil, 0xff
+				}
 			}
 
 			switch up.Dt {
@@ -138,14 +208,21 @@ func (e *ElectricityMeter) GetDL698DataByOAD(oad string) (utils.DL698Data, byte)
 		}
 		return dlArray, 0
 	} else {
-		fmt.Println("Value:", up.Value)
+		//fmt.Println("Value:", up.Value)
 		//所有Go类型数据转为Float64
-		val, err := getFloat64(up.Value)
-		if err != nil {
-			fmt.Println("Get float64 err:", err)
-			return nil, 0xff
+		if up.Dt != utils.DT_OCTET_STR {
+			val, err = getFloat64(up.Value)
+			if err != nil {
+				logs.Error("Get float64 err:", err)
+				return nil, 0xff
+			}
 		}
 		switch up.Dt {
+		case utils.DT_Scaler_Uint:
+			return &utils.DTScalerUint{
+				Value: val,
+				Unit:  up.Unit,
+			}, 0
 		case utils.DT_Int32:
 			return &utils.DTInt32{
 				Value: val,
@@ -206,10 +283,13 @@ func (e *ElectricityMeter) GetDL698DataByOAD(oad string) (utils.DL698Data, byte)
 }
 
 func (e *ElectricityMeter) RegisterOAD(up *UploadPoint) {
-	_ = dataExchange.RegisterOAD(up.Oad, e.GetDL698DataByOAD)
+	_ = dataExchange.RegisterOAD(up.Oad, e.Getdl698DataByOAD)
 }
 
 func getFloat64(ptrval interface{}) (val float64, err error) {
+	if ptrval == nil {
+		return 0, fmt.Errorf("ptrVal is nil")
+	}
 	switch ptrval.(type) {
 	case uint8:
 		val = float64(ptrval.(uint8))

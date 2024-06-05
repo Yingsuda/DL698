@@ -1,8 +1,8 @@
 package protocol
 
 import (
-	"dl698/protocol/pmodel"
-	"dl698/utils"
+	"dev.magustek.com/bigdata/dass/iotdriver/OP2_DL_698/protocol/pmodel"
+	"dev.magustek.com/bigdata/dass/iotdriver/OP2_DL_698/utils"
 	"fmt"
 	"sync"
 )
@@ -91,7 +91,7 @@ func (mp *DL698MsgProcessor) Process(pkt *utils.PacketData) (*utils.ProcessData,
 	}
 
 	if _, ok := mp.opts[apduType]; !ok {
-		return nil, fmt.Errorf("not support apdu type %v", apduType)
+		return nil, fmt.Errorf("not support apdu type %x", apduType)
 	}
 
 	gct := mp.opts[apduType]

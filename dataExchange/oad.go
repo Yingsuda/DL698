@@ -1,8 +1,8 @@
 package dataExchange
 
 import (
-	"dl698/utils"
-	"fmt"
+	"dev.magustek.com/bigdata/dass/iotdriver/OP2_DL_698/utils"
+	"gitee.com/iotdrive/tools/logs"
 	"time"
 )
 
@@ -34,7 +34,7 @@ func GetDL698DataTypeByOAD(oad string) (utils.DL698Data, byte) {
 	if f, ok := OAD_Map[oad]; ok {
 		return f(oad)
 	} else {
-		fmt.Println("oad ", oad, "is noe exist")
+		logs.Error("oad ", oad, "is not exist")
 	}
 	return nil, 0xFF
 }

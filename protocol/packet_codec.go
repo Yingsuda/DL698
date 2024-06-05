@@ -1,10 +1,9 @@
 package protocol
 
 import (
-	"dl698/utils"
+	"dev.magustek.com/bigdata/dass/iotdriver/OP2_DL_698/utils"
 	"encoding/binary"
 	"fmt"
-	"github.com/sigurn/crc16"
 	"sync"
 )
 
@@ -15,6 +14,7 @@ type PacketCodec interface {
 type DL698PacketCodec struct{}
 
 var dl698PacketCodec *DL698PacketCodec
+
 var codecOnce sync.Once
 
 func GetJT808PacketCodec() *DL698PacketCodec {
@@ -71,13 +71,13 @@ func (pc *DL698PacketCodec) Decode(data []byte) (*utils.PacketData, error) {
 
 	switch addrType {
 	case 0: //单地址
-		fmt.Println("单地址")
+		//fmt.Println("单地址")
 	case 1:
-		fmt.Println("组地址")
+		//fmt.Println("组地址")
 	case 2:
-		fmt.Println("通配地址")
+		//fmt.Println("通配地址")
 	case 3:
-		fmt.Println("广播地址")
+		//fmt.Println("广播地址")
 	default:
 		return nil, fmt.Errorf("address type err")
 	}
@@ -87,7 +87,7 @@ func (pc *DL698PacketCodec) Decode(data []byte) (*utils.PacketData, error) {
 			AddressType:  addrType,
 			LogicAddress: logicAddr,
 			AddressLen:   addressLen,
-			//extendLogic:  data[8],
+			//extenDLogic:  data[8],
 			Address: address,
 		},
 		Ca: data[5+addressLen],
@@ -124,6 +124,8 @@ func (pc *DL698PacketCodec) Encode(pkd *utils.PacketData, pcd *utils.ProcessData
 	//funcCode
 	//pkd.Control.Dir = 0
 	//fmt.Println("control:", pkd.Control)
+	pkd.Control.Dir = 1
+	pkd.Control.Prm = 1
 	data[3] = pkd.EncodeControl()
 
 	pkd.Address.Ca = 0x10
@@ -141,7 +143,7 @@ func (pc *DL698PacketCodec) Encode(pkd *utils.PacketData, pcd *utils.ProcessData
 	data = append(data, []byte{0xFF, 0xFF}...)
 	data = append(data, 0x16)
 	binary.LittleEndian.PutUint16(data[1:], uint16(len(data)-2))                                                              //长度
-	binary.LittleEndian.PutUint16(data[hcs:], crc16.Checksum(data[1:hcs], crc16.MakeTable(crc16.CRC16_X_25)))                 //HCS
-	binary.LittleEndian.PutUint16(data[len(data)-3:], crc16.Checksum(data[1:len(data)-3], crc16.MakeTable(crc16.CRC16_X_25))) //FCS
+	binary.LittleEndian.PutUint16(data[hcs:], utils.Checksum(data[1:hcs], utils.MakeTable(utils.CRC16_X_25)))                 //HCS
+	binary.LittleEndian.PutUint16(data[len(data)-3:], utils.Checksum(data[1:len(data)-3], utils.MakeTable(utils.CRC16_X_25))) //FCS
 	return data, nil
 }

@@ -1,33 +1,32 @@
 package main
 
 import (
-	"dl698/model"
-	"dl698/utils"
-	"fmt"
+	"dev.magustek.com/bigdata/dass/iotdriver/OP2_DL_698/model"
+	_ "dev.magustek.com/bigdata/dass/iotdriver/OP2_DL_698/sync"
+	"gitee.com/iotdrive/leader.upload/loop"
+	"gitee.com/iotdrive/leader.upload/model/upload"
+	uploadConst "gitee.com/iotdrive/leader.upload/utils/const"
+	"gitee.com/iotdrive/tools/logs"
+	"time"
 )
 
 func main() {
-	e := model.NewElectricityMeter("192.168.30.118:6001", "12345678")
+	uploadKey := "DL698"
+	upload.RegeditUpload(uploadKey, model.NewUpload698())
+	l := &loop.Loop{
+		DasName:       uploadConst.PROVIDE_DAS_KEY_SUB,
+		UploadName:    uploadKey,
+		AutoPushPoint: false,
+	}
 
-	err := e.Login()
+	err := l.LoopInit()
 	if err != nil {
-		fmt.Println("Login error:", err)
+		logs.Error(err)
 		return
 	}
-	oad := "20000200"
-
-	for i := 0; i < 3; i++ {
-		up := model.UploadPoint{
-			Oad:     oad,
-			Uid:     i,
-			Dt:      utils.DT_Uint16,
-			Value:   100,
-			IsArray: true,
-		}
-		//
-		e.AddPoint(&up) //分项电压
-		e.UpdateElectricityInfo(i, 2413)
-	}
-
-	e.Start()
+	l.Loop()
+	//通知协程推出
+	model.Cancel()
+	time.Sleep(time.Second)
+	logs.Error("upload all goroutine exit")
 }

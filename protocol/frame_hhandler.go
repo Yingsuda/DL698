@@ -23,7 +23,7 @@ type DL698FrameHandler struct {
 	writer io.Writer
 }
 
-func NewJT808FrameHandler(conn net.Conn) *DL698FrameHandler {
+func NewDL698FrameHandler(conn net.Conn) *DL698FrameHandler {
 	return &DL698FrameHandler{
 		rBuf:   bufio.NewReader(conn),
 		writer: conn,

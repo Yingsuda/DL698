@@ -1,9 +1,8 @@
 package pmodel
 
 import (
-	"dl698/utils"
+	"dev.magustek.com/bigdata/dass/iotdriver/OP2_DL_698/utils"
 	"encoding/binary"
-	"fmt"
 )
 
 type ConnectMechanismInfo struct {
@@ -55,9 +54,9 @@ func (c *ConnectRequest) Encode() ([]byte, error) {
 }
 
 func (c *ConnectRequest) Decode(data []byte) error {
-	fmt.Println("ConnectRequest")
+	//fmt.Println("ConnectRequest")
 	c.Piid = data[1]
-	fmt.Println("PIID:", c.Piid)
+	//fmt.Println("PIID:", c.Piid)
 
 	return nil
 }
@@ -104,7 +103,7 @@ func (c *ConnectResponse) Decode(bytes []byte) error {
 
 func (c *ConnectResponse) GenOutGoing(in utils.APDU) {
 	if in.GetType() == utils.Connect_Request {
-		fmt.Println("in piid:", in.(*ConnectRequest).Piid)
+		//fmt.Println("in piid:", in.(*ConnectRequest).Piid)
 	} else {
 		panic("不该来这里的")
 	}
