@@ -35,6 +35,6 @@ func GetDL698DataTypeByOAD(oad string) (utils.DL698Data, byte) {
 		return f(oad)
 	} else {
 		logs.Error("oad ", oad, "is not exist")
+		return nil, 0xFF
 	}
-	return nil, 0xFF
 }

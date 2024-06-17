@@ -2,6 +2,7 @@ package model
 
 import (
 	"context"
+	"dev.magustek.com/bigdata/dass/iotdriver/OP2_DL_698/DLContorl"
 	upload_points "gitee.com/iotdrive/leader.upload/model/points"
 	"gitee.com/iotdrive/leader.upload/utils/global"
 	"gitee.com/iotdrive/tools/logs"
@@ -20,6 +21,10 @@ type Upload698 struct {
 	port      string
 	saAddress string
 	runModel  int //0:server  1:client
+
+	controlAddress string
+	controlUser    string
+	controlPass    string
 }
 
 func NewUpload698() *Upload698 {
@@ -32,12 +37,21 @@ func (u *Upload698) SetupConf(conf config.Configer) {
 	if !strings.HasPrefix(u.port, ":") {
 		u.port = ":" + u.port
 	}
+	logs.Info("Port:", u.port)
 	u.saAddress = conf.DefaultString("saAddress", "12345678")
-	u.e = NewElectricityMeter("127.0.0.1:"+u.port, u.saAddress)
+	logs.Info("saAddress:", u.saAddress)
+	u.controlAddress = conf.DefaultString("controlAddress", "127.0.0.1:12000")
+	logs.Info("controlAddress:", u.controlAddress)
+
+	u.controlUser = conf.DefaultString("controlUser", "admin")
+	u.controlPass = conf.DefaultString("controlPass", "admin")
+
+	u.e = NewElectricityMeter("127.0.0.1:"+u.port, u.saAddress, u.controlAddress, u.controlUser, u.controlPass)
 	go u.Run()
 }
 
 func (u *Upload698) SyncPoints(plist []*upload_points.Point) error {
+	u.e.Reset()
 	var pNum = 0
 	for _, p := range plist {
 		if p == nil {
@@ -52,8 +66,13 @@ func (u *Upload698) SyncPoints(plist []*upload_points.Point) error {
 			logs.Error("convertUploadPoint err ", err, " AD is :", p.AD, " SR is :", p.SR)
 			continue
 		}
+
+		//测点是否支持控制
+		DLContorl.RegisterControlHandle(up.Oad, u.e.ControlByOAD)
+
 		up.Uid = int(p.UID)
 		up.GN = p.GN
+		up.RT = uint8(p.RT)
 		//保存测点
 		//根据OAD保存测点	 --用于获取数据
 		//根据UID保存测点  --用于更新数据

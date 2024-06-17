@@ -1,9 +1,11 @@
 package pmodel
 
 import (
+	"dev.magustek.com/bigdata/dass/iotdriver/OP2_DL_698/DLContorl"
 	"dev.magustek.com/bigdata/dass/iotdriver/OP2_DL_698/utils"
 	"encoding/binary"
 	"fmt"
+	"gitee.com/iotdrive/tools/logs"
 	"strconv"
 )
 
@@ -39,7 +41,13 @@ func (s *SetRequest) Decode(data []byte) error {
 		}
 		s.oads = append(s.oads, oad)
 		//encode datatype
-		//fmt.Printf("DataType:% 02X\n", data[7:])
+		fmt.Printf("DataType:% 02X\n", data[7:len(data)-1])
+		dt, dErr := utils.DecodeDL698Data(data[7 : len(data)-1])
+		if dErr == nil {
+			s.data = dt
+		} else {
+			logs.Error("DL698 DataType Decode err:", dErr)
+		}
 	case 2:
 		//fmt.Println("SetRequestNormalList")
 	case 3:
@@ -104,8 +112,18 @@ func (s *SetResponse) GenOutGoing(in utils.APDU) {
 		for _, oad := range s.oads {
 			//执行控制
 			//根据OAD执行控制
-			fmt.Println("Control OAD:", oad)
 			var errCode byte
+			if ind.data != nil {
+				//fmt.Println("Control OAD:", oad)
+				err := DLContorl.DoControl(oad, ind.data.GetValue())
+				if err != nil {
+					logs.Error(fmt.Sprintf("OAD %s Control err %s", oad, err.Error()))
+					errCode = 0xff
+				}
+			} else {
+				logs.Error("Not found DL698DataType for control")
+				errCode = 0xff
+			}
 			s.values = append(s.values, errCode)
 		}
 	} else {

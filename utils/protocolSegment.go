@@ -108,7 +108,7 @@ func (pkd *PacketData) EncodeAddress() []byte {
 }
 
 func DataTime2Str(dt []byte) string {
-	fmt.Printf("Date:% 02X\n", dt)
+	//fmt.Printf("Date:% 02X\n", dt)
 	if len(dt) != 10 {
 		return ""
 	}

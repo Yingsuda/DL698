@@ -58,11 +58,11 @@ func (l *LinkResponse) GenOutGoing(in utils.APDU) {
 		//逻辑处理
 		switch in.(*LinkRequest).RequestType {
 		case 0:
-			fmt.Println("Login")
+			//fmt.Println("Login")
 		case 1:
-			fmt.Println("HeartBeat")
+			//fmt.Println("HeartBeat")
 		case 2:
-			fmt.Println("Exit Login")
+			//fmt.Println("Exit Login")
 		default:
 			fmt.Println("UnSupport TypeCode")
 		}

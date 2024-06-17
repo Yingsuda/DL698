@@ -15,9 +15,10 @@ import (
 
 // 数组怎么支持
 type UploadPoint struct {
-	Oad string              //oad name
-	Uid int                 //for update value
-	GN  string              //for control ; array not support control
+	Oad string //oad name
+	Uid int    //for update value
+	GN  string //for control ; array not support control
+	RT  uint8
 	Dt  utils.DL698DataType //数据类型
 	//数组类型：
 	Value   interface{} //单个点的值
@@ -89,6 +90,9 @@ func convertUploadPoint(ad, sr string) (*UploadPoint, error) {
 		return nil, fmt.Errorf("ad is error")
 	}
 	up.Dt = dt
+	if len(up.Oad) != 8 {
+		return up, fmt.Errorf("oad length must be 8,now oad %s length  is %d ", up.Oad, len(up.Oad))
+	}
 	return up, nil
 }
 
@@ -132,6 +136,7 @@ func (e *ElectricityMeter) Getdl698DataByOAD(oad string) (utils.DL698Data, byte)
 	//fmt.Println("Get Data OAD is :", oad)
 	up, err := e.GetElectricityInfo(oad)
 	if err != nil {
+		logs.Error("GetElectricityInfo ", oad, " error:", err)
 		return nil, 0xff
 	}
 	var val float64
@@ -203,6 +208,7 @@ func (e *ElectricityMeter) Getdl698DataByOAD(oad string) (utils.DL698Data, byte)
 					Value: time.Now(),
 				})
 			default:
+				logs.Error("unSupport DTType!")
 				return nil, 0xff
 			}
 		}
@@ -238,6 +244,7 @@ func (e *ElectricityMeter) Getdl698DataByOAD(oad string) (utils.DL698Data, byte)
 					Value: up.Value.(string),
 				}, 0
 			default:
+				logs.Error("Now DTTYpe is DT_OCTET_STR,Value need be String")
 				return nil, 0xff
 			}
 		case utils.DT_Int8:
@@ -277,6 +284,7 @@ func (e *ElectricityMeter) Getdl698DataByOAD(oad string) (utils.DL698Data, byte)
 				Value: time.Now(),
 			}, 0
 		default:
+			logs.Error("unSupport DTType!")
 			return nil, 0xff
 		}
 	}

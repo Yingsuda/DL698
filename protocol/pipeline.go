@@ -81,13 +81,17 @@ func (p *PipeLine) ProcessConnWrite(pkd *utils.PacketData, pcd *utils.ProcessDat
 	res := make([]byte, 1024)
 	n, err := p.conn.Read(res)
 	if err != nil {
-		logs.Error("conn read err:", err)
+		if err == io.EOF {
+			p.connStatus = false
+			p.conn.Close()
+			logs.Error("conn read err:", err)
+		}
 		return err
 	}
 	logs.Debug("RES:% 02X", res[:n])
 	npkd, err := p.pc.Decode(res[:n])
 	if err != nil {
-		fmt.Println("Decode err:", err)
+		logs.Error("Decode err:", err)
 		return err
 	}
 	p.ca = npkd.Address.Ca

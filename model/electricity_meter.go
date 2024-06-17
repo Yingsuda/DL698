@@ -1,9 +1,14 @@
 package model
 
 import (
+	"dev.magustek.com/bigdata/dass/iotdriver/OP2_DL_698/DLContorl"
 	"dev.magustek.com/bigdata/dass/iotdriver/OP2_DL_698/protocol"
 	"fmt"
+	"gitee.com/iotdrive/tools/csapi"
+	"gitee.com/iotdrive/tools/logs"
 	"net"
+	"reflect"
+	"strconv"
 	"time"
 )
 
@@ -13,6 +18,7 @@ type ElectricityMeter struct {
 	oadMap   map[string]*UploadPoint //获取数据
 	pointMap map[int]*UploadPoint    //更新数据
 	pl       *protocol.PipeLine
+	cp       *DLContorl.ControlProxy //for control
 
 	addr      string
 	saAddress string
@@ -22,15 +28,15 @@ func (e *ElectricityMeter) dialTcp() (net.Conn, error) {
 	return net.Dial("tcp", e.addr)
 }
 
-func NewElectricityMeter(TcpHost string, SAAddress string) *ElectricityMeter {
+func NewElectricityMeter(TcpHost, SAAddress, ControlAddress, ControlUsername, ControlPass string) *ElectricityMeter {
 	em := &ElectricityMeter{
 		ch:        make(chan struct{}, 1),
 		addr:      TcpHost,
 		pointMap:  make(map[int]*UploadPoint),
 		oadMap:    make(map[string]*UploadPoint),
 		saAddress: SAAddress,
+		cp:        DLContorl.NewControlProxy(ControlAddress, ControlUsername, ControlPass),
 	}
-
 	//em.pl = protocol.NewPipeLine(em.dialTcp, SAAddress)
 	em.ch <- struct{}{}
 	return em
@@ -71,6 +77,12 @@ func (e *ElectricityMeter) AddPoint(up *UploadPoint) (err error) {
 	return err
 }
 
+func (e *ElectricityMeter) Reset() {
+	e.pointMap = make(map[int]*UploadPoint)
+	e.oadMap = make(map[string]*UploadPoint)
+
+}
+
 func (e *ElectricityMeter) Login(conn net.Conn) error {
 	e.pl = protocol.NewPipeLineWithConn(conn, e.saAddress)
 	err := e.pl.Login()
@@ -83,7 +95,10 @@ func (e *ElectricityMeter) Login(conn net.Conn) error {
 			select {
 			case <-ticker.C:
 				if e.pl.Status() {
-					_ = e.pl.HeartBeat()
+					err = e.pl.HeartBeat()
+					if err != nil {
+						logs.Error("Heart Beat err:", err)
+					}
 				} else {
 					return
 				}
@@ -96,4 +111,64 @@ func (e *ElectricityMeter) Login(conn net.Conn) error {
 func (e *ElectricityMeter) Start() {
 
 	e.pl.Start()
+}
+
+func (e *ElectricityMeter) ControlByOAD(oad string, value interface{}) error {
+	<-e.ch
+	defer func() {
+		e.ch <- struct{}{}
+	}()
+
+	defer e.cp.Close()
+	if up, ok := e.oadMap[oad]; ok {
+		//control
+		fmt.Printf("control UID %d ;Value %v ,Type is %T \n", up.Uid, value, value)
+		//连接管理
+		err := e.cp.CheckConn()
+		if err != nil {
+			return err
+		}
+
+		var av string
+		switch value.(type) {
+		case float64:
+			av = strconv.FormatFloat(value.(float64), 'f', 2, 64)
+		case string:
+			av = value.(string)
+		default:
+			logs.Notice("Unknown type of value:", reflect.TypeOf(value))
+			return fmt.Errorf("unknown type of value %v", reflect.TypeOf(value))
+		}
+
+		cmd := csapi.Command{
+			UID:      uint32(up.Uid),
+			GN:       up.GN,
+			AV:       av,
+			RT:       up.RT,
+			Operator: 1,
+		}
+
+		//登录
+		err = e.cp.Login()
+		if err != nil {
+			logs.Warning("登录控制代理失败！", err)
+			return fmt.Errorf("登录控制代理失败！")
+		}
+		logs.Info("control message:UID:%v,GN:%v,AV:%v", cmd.UID, cmd.GN, cmd.AV)
+
+		resp, err := e.cp.Write(cmd)
+		if err != nil {
+			logs.Error(err)
+		}
+
+		if resp.Status == false {
+			logs.Error("control err.UID:%v,GN:%v,AV:%v,Msg:%v", resp.UID, cmd.GN, cmd.AV, resp.Msg)
+			return fmt.Errorf("control err.UID:%v,GN:%v,AV:%v,Msg:%v", resp.UID, cmd.GN, cmd.AV, resp.Msg)
+		}
+		logs.Info("control success:UID:%v,Msg:%v,Status:%v,Type:%v", resp.UID, resp.Msg, resp.Status, resp.Type)
+		return nil
+	} else {
+		fmt.Println("ControlByOAD OAD Not Exist")
+		return fmt.Errorf("oad %s not exist,control err", oad)
+	}
 }

@@ -136,7 +136,6 @@ func (g *GetResponse) GenOutGoing(in utils.APDU) {
 		g.oads = append(g.oads, ind.oads...)
 		for _, oad := range ind.oads {
 			//根据oad获取数据， 获取到一个数据类型，但后Encode成[]byte
-
 			dt, errCode := dataExchange.GetDL698DataTypeByOAD(oad)
 			if errCode != 0 {
 				g.errInfos = append(g.errInfos, 0x00)

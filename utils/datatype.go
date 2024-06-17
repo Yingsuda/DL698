@@ -3,11 +3,14 @@ package utils
 import (
 	"encoding/binary"
 	"fmt"
+	"math"
+	"strconv"
 	"time"
 )
 
 type DL698Data interface {
 	Encode() ([]byte, error)
+	GetValue() interface{}
 }
 
 type DL698DataType byte
@@ -29,6 +32,138 @@ const (
 	DT_DateTime_S  DL698DataType = 0x1C //date_time_s
 	DT_Scaler_Uint DL698DataType = 0x59
 )
+
+func DecodeDL698Data(data []byte) (DL698Data, error) {
+	if len(data) > 0 {
+		switch data[0] {
+		//case byte(DT_NULL):
+		//return nil, fmt.Errorf("not support")
+		//case byte(DT_ARRAY):
+		//	return nil, fmt.Errorf("not support")
+		case byte(DT_Int32):
+			if len(data[1:]) >= 4 {
+				val := binary.BigEndian.Uint32(data[1:])
+				return &DTInt32{
+					dataType: DT_Int32,
+					Value:    float64(int32(val)),
+				}, nil
+			} else {
+				return nil, fmt.Errorf("int32 data length err")
+			}
+		case byte(DT_Uint32):
+			if len(data[1:]) >= 4 {
+				val := binary.BigEndian.Uint32(data[1:])
+				return &DTInt32{
+					dataType: DT_Int32,
+					Value:    float64(val),
+				}, nil
+			} else {
+				return nil, fmt.Errorf("int32 data length err")
+			}
+		case byte(DT_OCTET_STR):
+			if len(data) > 2 {
+				strLen := data[1]
+				if len(data[2:]) == int(strLen) {
+					val := ""
+					for _, b := range data[2:] {
+						val += strconv.FormatInt(int64(b), 16)
+					}
+					return &DTOctetString{
+						dataType: DT_OCTET_STR,
+						Value:    val,
+					}, nil
+				} else {
+					return nil, fmt.Errorf("OCTET_STR Length err , real Length is %d ;all length is %d", strLen, len(data))
+				}
+			} else {
+				return nil, fmt.Errorf("OCTET_STR Length err ,length is %d", len(data))
+			}
+		case byte(DT_Int8):
+			if len(data[1:]) >= 1 {
+				return &DTInt8{
+					dataType: DT_Int8,
+					Value:    float64(int8(data[2])),
+				}, nil
+			} else {
+				return nil, fmt.Errorf("int8 data length err")
+			}
+		case byte(DT_Int16):
+			if len(data[1:]) >= 2 {
+				val := binary.BigEndian.Uint16(data[1:])
+				return &DTInt8{
+					dataType: DT_Int16,
+					Value:    float64(int16(val)),
+				}, nil
+			} else {
+				return nil, fmt.Errorf("int16 data length err")
+			}
+		case byte(DT_Uint8):
+			if len(data[1:]) >= 1 {
+				return &DTUint8{
+					dataType: DT_Uint8,
+					Value:    float64(data[2]),
+				}, nil
+			} else {
+				return nil, fmt.Errorf("uint8 data length err")
+			}
+		case byte(DT_Uint16):
+			if len(data[1:]) >= 2 {
+				val := binary.BigEndian.Uint16(data[1:])
+				return &DTInt8{
+					dataType: DT_Uint16,
+					Value:    float64(val),
+				}, nil
+			} else {
+				return nil, fmt.Errorf("uint16 data length err")
+			}
+		case byte(DT_Int64):
+			if len(data[1:]) >= 8 {
+				val := binary.BigEndian.Uint64(data[1:])
+				return &DTInt32{
+					dataType: DT_Int64,
+					Value:    float64(int64(val)),
+				}, nil
+			} else {
+				return nil, fmt.Errorf("int64 data length err")
+			}
+		case byte(DT_Uint64):
+			if len(data[1:]) >= 4 {
+				val := binary.BigEndian.Uint64(data[1:])
+				return &DTInt32{
+					dataType: DT_Uint64,
+					Value:    float64(val),
+				}, nil
+			} else {
+				return nil, fmt.Errorf("uint64 data length err")
+			}
+		case byte(DT_Float32):
+			if len(data[1:]) >= 4 {
+				val := binary.BigEndian.Uint32(data[1:])
+				return &DTInt32{
+					dataType: DT_Float32,
+					Value:    float64(math.Float32frombits(val)),
+				}, nil
+			} else {
+				return nil, fmt.Errorf("float32 data length err")
+			}
+		case byte(DT_Float64):
+			if len(data[1:]) >= 8 {
+				val := binary.BigEndian.Uint64(data[1:])
+				return &DTInt32{
+					dataType: DT_Float64,
+					Value:    math.Float64frombits(val),
+				}, nil
+			} else {
+				return nil, fmt.Errorf("float64 data length err")
+			}
+		default:
+			return nil, fmt.Errorf("DT_Type not support")
+		}
+	} else {
+		return nil, fmt.Errorf("data length err")
+	}
+
+}
 
 func GetDLDataType(sdt string) (DL698DataType, error) {
 	var dt DL698DataType
@@ -75,6 +210,10 @@ type DTScalerUint struct {
 	Unit     byte
 }
 
+func (dt *DTScalerUint) GetValue() interface{} {
+	return dt.Value
+}
+
 func (dt *DTScalerUint) Encode() ([]byte, error) {
 	res := []byte{byte(DT_Scaler_Uint), byte(dt.Value), 0xff}
 	if dt.Unit != 0 {
@@ -86,6 +225,10 @@ func (dt *DTScalerUint) Encode() ([]byte, error) {
 type DTOctetString struct {
 	dataType DL698DataType
 	Value    string
+}
+
+func (dt *DTOctetString) GetValue() interface{} {
+	return dt.Value
 }
 
 func (dt *DTOctetString) Encode() ([]byte, error) {
@@ -107,7 +250,6 @@ func (dt *DTOctetString) Encode() ([]byte, error) {
 		} else {
 			return nil, fmt.Errorf("dt value %v is not number", dt.Value)
 		}
-
 	}
 
 	res = append(res, valb...)
@@ -125,6 +267,10 @@ func (dt *DTNull) Encode() ([]byte, error) {
 type DTDateTimeS struct {
 	dataType DL698DataType
 	Value    time.Time
+}
+
+func (dt *DTDateTimeS) GetValue() interface{} {
+	return dt.Value
 }
 
 func (dt *DTDateTimeS) Encode() ([]byte, error) {
@@ -148,6 +294,10 @@ type DTArray struct {
 	Value    []DL698Data
 }
 
+func (dt *DTArray) GetValue() interface{} {
+	return dt.Value
+}
+
 func (dt *DTArray) Encode() ([]byte, error) {
 	res := []byte{byte(DT_ARRAY), byte(len(dt.Value))}
 	for _, v := range dt.Value {
@@ -162,6 +312,10 @@ type DTUint8 struct {
 	Value    float64
 }
 
+func (dt *DTUint8) GetValue() interface{} {
+	return dt.Value
+}
+
 func (dt *DTUint8) Encode() ([]byte, error) {
 	res := []byte{byte(DT_Uint8)}
 	return res, nil
@@ -170,6 +324,10 @@ func (dt *DTUint8) Encode() ([]byte, error) {
 type DTInt8 struct {
 	dataType DL698DataType
 	Value    float64
+}
+
+func (dt *DTInt8) GetValue() interface{} {
+	return dt.Value
 }
 
 func (dt *DTInt8) Encode() ([]byte, error) {
@@ -182,6 +340,10 @@ type DTInt16 struct {
 	Value    float64
 }
 
+func (dt *DTInt16) GetValue() interface{} {
+	return dt.Value
+}
+
 func (dt *DTInt16) Encode() ([]byte, error) {
 	res := []byte{byte(DT_Int16)}
 	return res, nil
@@ -190,6 +352,10 @@ func (dt *DTInt16) Encode() ([]byte, error) {
 type DTUint16 struct {
 	dataType DL698DataType
 	Value    float64
+}
+
+func (dt *DTUint16) GetValue() interface{} {
+	return dt.Value
 }
 
 func (dt *DTUint16) Encode() ([]byte, error) {
@@ -203,6 +369,10 @@ type DTInt32 struct {
 	Value    float64
 }
 
+func (dt *DTInt32) GetValue() interface{} {
+	return dt.Value
+}
+
 func (dt *DTInt32) Encode() ([]byte, error) {
 	val := []byte{byte(DT_Int32), 0x00, 0x00, 0x00, 0x00}
 	binary.BigEndian.PutUint32(val[1:], uint32(dt.Value))
@@ -212,6 +382,10 @@ func (dt *DTInt32) Encode() ([]byte, error) {
 type DTUint32 struct {
 	dataType DL698DataType
 	Value    float64
+}
+
+func (dt *DTUint32) GetValue() interface{} {
+	return dt.Value
 }
 
 func (dt *DTUint32) Encode() ([]byte, error) {
@@ -225,6 +399,10 @@ type DTFloat32 struct {
 	Value    float64
 }
 
+func (dt *DTFloat32) GetValue() interface{} {
+	return dt.Value
+}
+
 func (dt *DTFloat32) Encode() ([]byte, error) {
 	val := []byte{byte(DT_Float32)}
 
@@ -234,6 +412,10 @@ func (dt *DTFloat32) Encode() ([]byte, error) {
 type DTFloat64 struct {
 	dataType DL698DataType
 	Value    float64
+}
+
+func (dt *DTFloat64) GetValue() interface{} {
+	return dt.Value
 }
 
 func (dt *DTFloat64) Encode() ([]byte, error) {
@@ -246,6 +428,10 @@ type DTInt64 struct {
 	Value    float64
 }
 
+func (dt *DTInt64) GetValue() interface{} {
+	return dt.Value
+}
+
 func (dt *DTInt64) Encode() ([]byte, error) {
 	res := []byte{byte(DT_Int64)}
 	return res, nil
@@ -254,6 +440,10 @@ func (dt *DTInt64) Encode() ([]byte, error) {
 type DTUint64 struct {
 	dataType DL698DataType
 	Value    float64
+}
+
+func (dt *DTUint64) GetValue() interface{} {
+	return dt.Value
 }
 
 func (dt *DTUint64) Encode() ([]byte, error) {
